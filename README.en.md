@@ -24,7 +24,12 @@ These challenges are already problematic in general office scenarios, and they b
 - **Audit and Compliance**: Enterprises need complete and traceable operation logs to pass compliance audits such as cybersecurity classified protection and the Sarbanes–Oxley Act (SOX).
 - **Business Continuity**: ERP stability directly affects enterprise operations; any erroneous operation may cause production downtime.
 
-Currently, enterprises face a dilemma in ERP intelligence: either adopt functionally limited cloud assistants that cannot penetrate the ERP core, or experiment with open-source agent frameworks that introduce unacceptable security risks. Neither can satisfy the core demand of **enabling AI to operate ERP securely**.
+Currently, enterprises face multi-dimensional tradeoffs in the intellectualization of ERP systems:
+
+- **Vendor Ecosystem Path**: Adopting built-in AI capabilities provided by ERP vendors (e.g., SAP Joule, Oracle Fusion AI) offers the advantages of deep integration and out-of-the-box usability, but is constrained by the vendor ecosystem, requires data to be migrated to the cloud, and provides limited customization.
+- **In-House Development Path**: Conducting customized development based on open-source or commercial agent frameworks enables autonomy, control, and deep customization, but demands substantial investment in R&D resources and presents high technical barriers in areas including security isolation, privilege control, and audit compliance.
+
+Across both paths, enterprises still lack a **lightweight, controllable, auditable, and data-sovereign general solution** to address the core requirement of *enabling AI to operate ERP systems securely*. What ColdMirror seeks to explore is precisely such a complementary technical approach.
 
 Without negating the exploratory value of existing frameworks, ColdMirror pursues an alternative approach: it abandons the pursuit of all-encompassing functionality and focuses instead on **security isolation** and **minimalist controllability**. Its core logic is to return LLMs to their strength in content generation, delegate concrete operational execution to lightweight scripts, and enforce secure authorization and auditing for all operations via the CAGE layer.
 
