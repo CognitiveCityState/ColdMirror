@@ -15,6 +15,17 @@
 - **隐私与成本考量**：云端服务依赖数据上传，对隐私敏感的用户构成顾虑；而按token计费的模式在需要频繁交互的场景下，可能带来较高的使用成本。
 - **审计与可控性**：智能体执行操作的过程往往难以追踪和审计，用户难以确认“AI具体做了什么、为什么这么做”，这在需要明确责任归属的场景中尤为突出。
 
+### 从通用场景到企业核心系统
+
+上述挑战在通用办公场景中已足够棘手，当智能体试图触碰企业核心系统（如ERP）时，问题变得更为复杂。ERP系统承载着企业最敏感的数据——财务、库存、生产、人力资源。任何智能体直接操作ERP，都意味着巨大的风险：
+
+- **数据主权**：ERP数据是企业的命脉，不能离开企业边界，更不允许被随意传输到云端。
+- **权限控制**：ERP操作需要精确到字段级别的权限管理，AI“自主决策”的模式无法满足审计要求。
+- **审计合规**：企业需要完整、可追溯的操作日志，以通过等保、SOX等合规审查。
+- **业务连续性**：ERP的稳定性直接影响企业运转，任何误操作都可能导致生产中断。
+
+目前，企业在ERP智能化方面面临两难：要么采用功能受限的云端助手（无法深入ERP核心），要么尝试开源智能体框架（安全风险难以接受）。两者都无法满足“安全地让AI操作ERP”这一核心需求。
+
 ColdMirror尝试探索一条不同的路径：在尊重现有框架探索价值的基础上，不追求功能的大而全，而是聚焦于“安全隔离”与“极简可控”。其核心思路是：让大模型回归其最擅长的内容生成角色，而将具体操作执行交由轻量级脚本完成，并通过CAGE层实现所有操作的安全授权与审计。
 
 ---
@@ -26,7 +37,7 @@ ColdMirror的架构建立在CAGE安全隔离层之上，将智能体任务拆解
 ```mermaid
 graph LR
     subgraph 用户侧
-        A[应用脚本<br>（微信、文件管理、笔记等）]
+        A[应用脚本<br>（ERP查询、订单导入等）]
     end
 
     subgraph 安全层
@@ -34,7 +45,7 @@ graph LR
     end
 
     subgraph 执行层
-        C[真实系统<br>文件操作、API调用]
+        C[ERP系统<br>数据查询、订单创建等]
     end
 
     A --> B
@@ -42,8 +53,8 @@ graph LR
 ```
 
 ### 1. 用户侧：应用脚本
-每个应用场景（如微信消息处理、本地文件整理）对应一个独立的轻量级脚本。脚本负责：
-- 向CAGE网关发送结构化操作请求（如`organize_downloads`、`format_clipboard`）
+每个ERP应用场景（如库存查询、订单导入）对应一个独立的轻量级脚本。脚本负责：
+- 向CAGE网关发送结构化操作请求（如`erp_query_inventory`、`erp_create_order`）
 - 接收CAGE返回的执行结果
 
 脚本本身不包含任何系统权限，所有实际操作均通过CAGE完成。这种设计将业务逻辑与安全机制完全解耦，使得单个脚本的实现可以保持简洁，核心逻辑通常可控制在数百行代码内，易于维护和扩展。
@@ -54,16 +65,16 @@ graph LR
 - **一次性令牌**：为每个操作生成唯一令牌，令牌使用后立即失效
 - **审计日志**：记录所有请求与操作，便于事后追溯
 
-CAGE网关作为独立服务运行，持有真实系统权限（如文件读写、API密钥），但仅在令牌校验通过后代理执行操作。
+CAGE网关作为独立服务运行，持有ERP系统的访问权限，但仅在令牌校验通过后代理执行操作。
 
-### 3. 执行层：真实系统
-CAGE网关负责与真实系统交互，执行经过授权的操作。大模型在ColdMirror框架中被封装在CAGE内部（或作为独立服务），其输出仅限于内容生成（如文本回复、格式化结果），不直接触发任何系统调用。
+### 3. 执行层：ERP系统
+CAGE网关负责与真实的ERP系统（或模拟器）交互，执行经过授权的操作。大模型在ColdMirror框架中被封装在CAGE内部（或作为独立服务），其输出仅限于内容生成（如自然语言指令的解析结果），不直接触发任何系统调用。
 
 ---
 
 ## 技术实现
 
-ColdMirror本身不重新实现安全机制，而是以CAGE为安全底座。用户只需为应用场景编写脚本，调用CAGE提供的API即可获得完整的安全隔离能力。
+ColdMirror本身不重新实现安全机制，而是以CAGE为安全底座。用户只需为ERP场景编写脚本，调用CAGE提供的API即可获得完整的安全隔离能力。
 
 ### CAGE API调用示例
 
@@ -81,14 +92,11 @@ def execute_cage_token(token):
     return resp.json()["result"]
 ```
 
-### 典型脚本结构（以文件整理为例）
+### 典型脚本结构（以ERP库存查询为例）
 
 ```python
-# organize_downloads.py
-token = request_cage_token("organize_downloads", {
-    "source_dir": "./demo_safe/Downloads",
-    "target_base": "./demo_safe/Documents"
-})
+# query_inventory.py
+token = request_cage_token("erp_query_inventory", {})
 result = execute_cage_token(token)
 print(result)
 ```
@@ -97,99 +105,94 @@ print(result)
 
 ---
 
-## 案例演示
+## 案例演示：ERP安全智能体
 
-以下为ColdMirror结合CAGE的三个典型场景演示，所有操作均在隔离环境（`demo_safe`目录）中进行。
+以下为ColdMirror结合CAGE在ERP场景中的完整演示，所有操作遵循“只读优先、确认至上、沙箱隔离”原则。演示环境包括：
+- **ERP模拟器**：模拟企业ERP系统，提供库存查询、订单查询、订单导出、订单创建等API
+- **CAGE服务**：安全网关，负责令牌授权与审计
+- **GUI界面**：直观展示操作过程与结果
 
-### 场景一：本地下载文件夹自动分类整理
+### 演示流程
 
-**功能**：将`demo_safe/Downloads`中的文件按类型归类到`demo_safe/Documents`下的子文件夹（Pictures、Documents、Archives），仅移动文件，不执行删除操作。
+1. **启动服务**：分别启动CAGE服务与ERP模拟器
+2. **只读操作**：通过GUI查询库存、查询订单、导出订单报表
+3. **写入操作**：从Excel导入订单，系统要求人工确认后执行
+4. **结果验证**：再次查询订单，确认新订单已创建
 
-**执行流程**（CAGE服务端日志）：
-
-```
-[INFO] 收到令牌请求: action=organize_downloads, source_dir=./demo_safe/Downloads, target_base=./demo_safe/Documents
-[INFO] 令牌生成: 1e3bd976676a585853edfb36e6cfcc9c -> organize_downloads
-[INFO] 收到执行请求: token=1e3bd976676a585853edfb36e6cfcc9c
-[INFO] 执行操作: organize_downloads (令牌已销毁)
-[INFO] 执行结果: 已整理 demo_safe/Downloads 中的文件
-```
-
-**执行效果**（`demo_safe`目录变化）：
-
-![文件整理前后对比](assets/organize-downloads-result.png)
-
----
-
-### 场景二：剪贴板文本格式化
-
-**功能**：将剪贴板中的文本（如购物清单）整理成带项目符号的清晰列表，并写回剪贴板。
-
-**执行流程**：
+### CAGE服务日志（关键操作记录）
 
 ```
-[INFO] 收到令牌请求: action=format_clipboard
-[INFO] 令牌生成: fc97941cd64ed9fa8f6a3d02dffde06f -> format_clipboard
-[INFO] 收到执行请求: token=fc97941cd64ed9fa8f6a3d02dffde06f
-[INFO] 执行操作: format_clipboard (令牌已销毁)
-[INFO] 执行结果:
-- 买菜  鸡蛋 牛奶 面包
-- 水果要香蕉苹果橙子
-- 厨房纸洗洁精别忘了
-- 还有垃圾袋 保鲜膜
+[启动] CAGE 服务运行于 http://127.0.0.1:5000
+
+[请求] 收到令牌请求: action=erp_query_inventory
+[授权] 令牌生成 -> erp_query_inventory
+[执行] 操作 erp_query_inventory 执行成功，令牌已销毁
+[响应] 返回库存数据: 螺栓(P001) 85, 螺母(P002) 230, 垫圈(P003) 500
+
+[请求] 收到令牌请求: action=erp_query_orders
+[授权] 令牌生成 -> erp_query_orders
+[执行] 操作 erp_query_orders 执行成功，令牌已销毁
+[响应] 返回订单数据: ORD001(100 pending), ORD002(50 completed)
+
+[请求] 收到令牌请求: action=erp_export_orders (format=csv)
+[授权] 令牌生成 -> erp_export_orders
+[执行] 操作 erp_export_orders 执行成功，令牌已销毁
+[响应] 订单报表已导出到 orders_export.csv
+
+[请求] 收到令牌请求: action=erp_create_order (P001, 200)
+[授权] 令牌生成 -> erp_create_order
+[执行] 操作 erp_create_order 执行成功，令牌已销毁
+[响应] 订单 ORD003 已创建（pending）
+
+[请求] 收到令牌请求: action=erp_create_order (P002, 80)
+[授权] 令牌生成 -> erp_create_order
+[执行] 操作 erp_create_order 执行成功，令牌已销毁
+[响应] 订单 ORD004 已创建（pending）
+
+[请求] 收到令牌请求: action=erp_create_order (P003, 100)
+[授权] 令牌生成 -> erp_create_order
+[执行] 操作 erp_create_order 执行成功，令牌已销毁
+[响应] 订单 ORD005 已创建（pending）
+
+[请求] 收到令牌请求: action=erp_query_orders
+[授权] 令牌生成 -> erp_query_orders
+[执行] 操作 erp_query_orders 执行成功，令牌已销毁
+[响应] 返回订单数据（包含新增的三条订单）
 ```
 
-> 注：当前演示版使用简单规则处理文本，实际应用中可替换为轻量级大模型API以获得更好的格式化效果。
-
----
-
-## 场景三：本地笔记自动汇总（安全机制演示）
-
-**功能**：读取`demo_safe/notes.txt`中的内容，生成`summary.md`简报。当前版本聚焦于安全机制演示，采用简单的内容复制（或截取）作为示例，实际应用可按需替换为真实的摘要生成逻辑（如调用大模型API或本地摘要算法）。
-
-**执行流程**（CAGE服务端日志）：
+### ERP模拟器日志
 
 ```
-[INFO] 收到令牌请求: action=summarize_notes, input_path=./demo_safe/notes.txt, output_path=./demo_safe/summary.md
-[INFO] 令牌生成: 9e283a3daa1c8444e957558cd3c622d0 -> summarize_notes
-[INFO] 收到执行请求: token=9e283a3daa1c8444e957558cd3c622d0
-[INFO] 执行操作: summarize_notes (令牌已销毁)
-[INFO] 执行结果: 已生成简报: demo_safe/summary.md
+[启动] ERP 模拟器运行于 http://127.0.0.1:5001
+
+[处理] GET /inventory → 返回库存数据
+[处理] GET /orders → 返回订单数据
+[处理] GET /export/orders → 导出订单 CSV 文件
+[处理] POST /orders (P001, 200) → 创建订单 ORD003
+[处理] POST /orders (P002, 80) → 创建订单 ORD004
+[处理] POST /orders (P003, 100) → 创建订单 ORD005
+[处理] GET /orders → 返回更新后的订单数据
 ```
 
-**生成的简报示例**（`summary.md`）：
+### GUI演示结果
 
-```markdown
-# 每日简报
+以下为ColdMirror GUI在完成上述操作后的最终界面展示：
 
-2026-03-24 讨论 CAGE 架构
-- 安全隔离优于行为约束
-- 一次性令牌机制
-- 极轻量实现
-
-2026-03-25 验证 PoC
-- 三个场景已通过
-- 下一步集成 ColdMirror
-```
-
-> **说明**：此演示中的简报内容直接取自输入笔记文件，未经过智能摘要处理。在实际部署中，可通过替换 `summarize_notes` 动作的实现，接入真实的摘要能力（如大模型API）。当前演示的主要目的是验证CAGE的安全授权与审计机制，而非展示摘要算法本身。
+![ColdMirror ERP PoC 演示结果](assets/coldmirror-result.png)
 
 ---
 
 ## 运行指南
 
-1. **环境要求**：Python 3.8+，需安装 Flask、requests（`pip install flask requests`）。
-2. **下载代码**：克隆本仓库。
-3. **启动CAGE服务**：
-   ```bash
-   python cage_server.py
-   ```
-4. **运行场景脚本**（在另一个终端）：
-   ```bash
-   python examples/organize_downloads.py
-   ```
+1. **环境要求**：Python 3.8+，需安装 Flask、requests、pandas、openpyxl（`pip install flask requests pandas openpyxl`）
+2. **下载代码**：克隆本仓库
+3. **生成演示数据**：运行 `python main.py` 选择 `1`
+4. **启动CAGE服务**：运行 `python main.py` 选择 `2`（该终端需保持运行）
+5. **启动ERP模拟器**：另开终端，运行 `python main.py` 选择 `3`（该终端需保持运行）
+6. **运行GUI**：再开一个终端，运行 `python gui.py`
+7. **操作演示**：在GUI中依次点击“查询库存”“查询订单”“导出报表”“从Excel导入订单”（导入时需确认），观察结果
 
-> 所有操作默认限定在 `demo_safe` 目录下，可通过修改脚本中的路径进行扩展，但建议保持白名单约束。
+> 所有ERP操作限定在模拟环境中，不涉及真实企业数据。实际部署时，只需替换 `erp_simulator.py` 为真实ERP API调用，并保持白名单与日志机制不变。
 
 ---
 
@@ -197,10 +200,10 @@ print(result)
 
 ColdMirror的设计定位是作为智能体框架的**轻量化补充**，而非替代现有复杂框架。其潜在价值体现在：
 
-- **安全隔离**：以CAGE为底座，继承其完整的安全机制，所有操作需经令牌授权。
-- **轻量部署**：核心逻辑与具体场景解耦，新增功能只需编写独立脚本，无需修改核心系统。
-- **成本可控**：大模型仅用于内容生成，token消耗较低；CAGE服务本地运行，无额外算力负担。
-- **可审计**：CAGE的日志记录所有操作，便于事后追溯与合规审查。
+- **安全隔离**：以CAGE为底座，所有ERP操作需经令牌授权，脚本无权直接触碰ERP系统
+- **可控可审计**：写入操作需人工确认，CAGE完整记录所有操作，满足企业合规要求
+- **数据主权**：ERP模拟器与CAGE服务可完全本地部署，数据不出企业边界
+- **轻量部署**：核心逻辑与具体场景解耦，新增功能只需编写独立脚本，无需修改核心系统
 
 ---
 
@@ -208,19 +211,19 @@ ColdMirror的设计定位是作为智能体框架的**轻量化补充**，而非
 
 ColdMirror是一个初步的工程探索，存在明确的边界：
 
-- **脚本覆盖范围**：当前仅实现文件整理、剪贴板格式化、笔记摘要三个场景，需按需扩展。
-- **大模型集成**：当前演示版未集成真实大模型API，实际应用可按需接入。
-- **复杂工作流**：暂未支持多步骤、依赖关系的复杂任务，未来可引入状态跟踪。
+- **大模型集成**：当前演示未接入真实大模型API，用户需通过GUI或脚本手动发起操作。下一步可接入大模型（如通义千问、GPT），将自然语言指令解析为结构化请求，实现真正的“智能体”
+- **场景扩展**：当前实现库存查询、订单查询、导出、导入四个场景，需按企业实际需求扩展更多业务操作
+- **复杂工作流**：暂未支持多步骤、依赖关系的复杂任务，未来可引入状态跟踪
 
-我们欢迎对智能体安全、轻量架构感兴趣的开发者参与讨论和实验，共同探索这一“极简可控”的智能体实现路径。
+我们欢迎对智能体安全、ERP智能化感兴趣的开发者参与讨论和实验，共同探索这一“极简可控”的智能体实现路径。
 
 ---
 
 ## 引用
 
 Lu, Y. (2026). *The Cold Existence Model: A Fact-based Ontological Framework for AI*. figshare. [https://doi.org/10.6084/m9.figshare.31696846](https://doi.org/10.6084/m9.figshare.31696846)  
-Lu, Y. (2025). *Deconstructing the Dual Black Box: A Plug-and-Play Cognitive Framework for Human-AI Collaborative Enhancement and Its Implications for AI Governance*. arXiv. [https://doi.org/10.48550/arXiv.2512.08740](https://doi.org/10.48550/arXiv.2512.08740)  
-CAGE项目仓库：[https://github.com/CognitiveCityState/ColdCAGE](https://github.com/CognitiveCityState/ColdCAGE)
+Lu, Y. (2025). *Deconstructing the Dual Black Box: A Plug-and-Play Cognitive Framework for Human-AI Collaborative Enhancement and Its Implications for AI Governance*. arXiv. [https://doi.org/10.48550/arXiv.2512.08740](https://doi.org/10.48550/arXiv.2512.08740)  <br>
+CAGE 项目仓库：[https://github.com/CognitiveCityState/ColdCAGE](https://github.com/CognitiveCityState/ColdCAGE)
 
 ---
 
@@ -228,7 +231,8 @@ CAGE项目仓库：[https://github.com/CognitiveCityState/ColdCAGE](https://gith
 
 在ColdMirror项目的构思与开发过程中，人工智能工具（DeepSeek、豆包）提供了辅助支持。具体贡献如下：
 
-- **人类作者**：基于对现有智能体框架的观察，提出“分布式脚本+安全中间件”的核心构想，并主导了整体架构设计、关键决策及成果审核。
-- **人工智能工具**：协助梳理了现有智能体框架的技术特点，提供了CAGE作为安全底座的集成思路，完成了CAGE服务端和场景脚本的代码实现，并生成了本README文档的初稿。
+- **人类作者**：与豆包AI、DeepSeek共同分析了现有智能体框架的现状与不足，探讨了智能体与ERP结合的技术难点，提出了基于ColdMirror路径尝试将ERP与智能体结合的核心构想，并主导了整体架构设计、关键决策及成果审核。
+- **DeepSeek**：根据人类作者的构想，完成了CAGE服务端、ERP模拟器、GUI界面及所有演示脚本的代码实现，并生成了本README文档的初稿。
+- **豆包AI**：协助梳理了现有智能体框架的技术特点，提供了智能体与ERP结合的场景分析。
 
 人工智能工具的使用严格限于辅助性工作，不构成原创性贡献。项目的核心思想、架构选择及最终内容的确认均由人类作者独立完成。
