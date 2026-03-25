@@ -1,0 +1,17 @@
+# Python缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# 运行时生成的演示数据（整个目录）
+demo_data/
+
+# CAGE日志文件
+cage.log
+
+# 临时导出文件
+orders_export.csv
+
+# IDE配置
+.vscode/
+.idea/
